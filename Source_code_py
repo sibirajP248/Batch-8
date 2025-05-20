@@ -1,0 +1,34 @@
+# prompt: Source_code_py
+
+# The following two lines import the Cloud Storage client library.
+from google.colab import auth
+from googleapiclient.discovery import build
+
+auth.authenticate_user()
+
+project_id = 'colab-test-project-123'
+bucket_name = 'colab-sample-bucket-' + str(uuid.uuid1())
+
+# Create a Cloud Storage client object.
+gcs_client = build('storage', 'v1')
+
+# Create the bucket.
+gcs_client.buckets().insert(project=project_id, body={'name': bucket_name}).execute()
+print('Bucket created:', bucket_name)
+
+# Upload the file.
+with open('/tmp/to_upload.txt', 'rb') as f:
+  gcs_client.objects().insert(bucket=bucket_name, name='my-object.txt', body=f).execute()
+print('File uploaded to gs://%s/%s' % (bucket_name, 'my-object.txt'))
+
+# Download the file.
+with open('/tmp/downloaded_file.txt', 'wb') as f:
+  gcs_client.objects().get(bucket=bucket_name, object='my-object.txt').execute(f)
+print('File downloaded to /tmp/downloaded_file.txt')
+!cat /tmp/downloaded_file.txt
+
+# Delete the object and the bucket.
+gcs_client.objects().delete(bucket=bucket_name, object='my-object.txt').execute()
+print('Object deleted.')
+gcs_client.buckets().delete(bucket=bucket_name).execute()
+print('Bucket deleted.')
