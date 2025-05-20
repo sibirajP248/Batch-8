@@ -1,0 +1,38 @@
+# prompt: Enhancing road safety with AI-driven traffic accident analysis and 
+# prediction by demo program 
+
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score
+import numpy as np
+
+# Create a sample dataset (replace with your actual data loading)
+data = {'speed': np.random.randint(20, 100, 100),
+        'weather_condition': np.random.choice(['Clear', 'Rainy', 'Foggy'], 100),
+        'accident': np.random.choice([0, 1], 100, p=[0.7, 0.3])} # 0: No Accident, 1: Accident
+df = pd.DataFrame(data)
+
+print("Sample Data:")
+print(df.head())
+
+# Basic Analysis: Count accidents by weather condition
+print("\nAccidents by Weather Condition:")
+print(df.groupby('weather_condition')['accident'].sum())
+
+# Simple Prediction (Rule-based for demonstration):
+# Predict accident if speed is high and weather is not clear
+def predict_simple_accident(row):
+    if row['speed'] > 70 and row['weather_condition'] != 'Clear':
+        return 1 # Predict accident
+    else:
+        return 0 # Predict no accident
+
+df['predicted_accident'] = df.apply(predict_simple_accident, axis=1)
+
+print("\nSample Data with Simple Prediction:")
+print(df.head())
+
+# Note: A real AI solution would involve proper feature engineering,
+# training a machine learning model (e.g., decision tree, random forest),
+# and evaluating its performance using metrics like accuracy, precision, and recall.
