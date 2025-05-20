@@ -1,0 +1,225 @@
+# prompt: Enhancing road safety with AI-driven traffic accident analysis and 
+# prediction by output (google colab implementation )
+
+!pip install pandas matplotlib seaborn scikit-learn tensorflow
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report, confusion_matrix, roc_curve, auc
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout
+
+# --- Data Loading and Initial Exploration ---
+
+# Assuming you have a dataset in a CSV file named 'traffic_accidents.csv'
+# Replace with your actual dataset path or upload it to Colab
+try:
+    df = pd.read_csv('traffic_accidents.csv')
+    print("Dataset loaded successfully.")
+    print(df.head())
+    print(df.info())
+    print(df.describe())
+except FileNotFoundError:
+    print("Error: 'traffic_accidents.csv' not found. Please upload your dataset or provide the correct path.")
+    # Create a dummy DataFrame for demonstration if the file is not found
+    data = {
+        'accident_severity': ['Fatal', 'Serious', 'Slight', 'Fatal', 'Serious', 'Slight', 'Fatal', 'Serious', 'Slight', 'Fatal'],
+        'weather_conditions': ['Fine', 'Rain', 'Fine', 'Snow', 'Fine', 'Rain', 'Fine', 'Snow', 'Fine', 'Rain'],
+        'road_surface_conditions': ['Dry', 'Wet', 'Dry', 'Snow', 'Dry', 'Wet', 'Dry', 'Snow', 'Dry', 'Wet'],
+        'vehicle_type': ['Car', 'Lorry', 'Van', 'Car', 'Lorry', 'Van', 'Car', 'Lorry', 'Van', 'Car'],
+        'speed_limit': [30, 60, 40, 30, 60, 40, 30, 60, 40, 30],
+        'number_of_vehicles': [2, 1, 1, 3, 2, 1, 2, 3, 1, 2],
+        'day_of_week': ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday'],
+        'time_of_day_hour': [9, 14, 18, 11, 16, 22, 1, 10, 15, 19],
+        'location_latitude': [51.5074, 51.5174, 51.5274, 51.5074, 51.5174, 51.5274, 51.5074, 51.5174, 51.5274, 51.5074],
+        'location_longitude': [-0.1278, -0.1378, -0.1478, -0.1278, -0.1378, -0.1478, -0.1278, -0.1378, -0.1478, -0.1278]
+    }
+    df = pd.DataFrame(data)
+    print("\nCreated a dummy DataFrame for demonstration.")
+    print(df.head())
+
+
+# --- Data Preprocessing and Feature Engineering ---
+
+# Handle missing values (example: fill with mode for categorical, median for numerical)
+for col in ['weather_conditions', 'road_surface_conditions', 'vehicle_type', 'day_of_week']:
+    if col in df.columns:
+        df[col].fillna(df[col].mode()[0], inplace=True)
+for col in ['speed_limit', 'number_of_vehicles', 'time_of_day_hour']:
+    if col in df.columns:
+         df[col].fillna(df[col].median(), inplace=True)
+
+# Convert target variable to numerical if needed (e.g., 'Fatal' -> 2, 'Serious' -> 1, 'Slight' -> 0)
+if 'accident_severity' in df.columns:
+  severity_mapping = {'Slight': 0, 'Serious': 1, 'Fatal': 2}
+  df['accident_severity_encoded'] = df['accident_severity'].map(severity_mapping)
+  if df['accident_severity_encoded'].isnull().any():
+      print("Warning: Some accident_severity values could not be mapped.")
+      print(df[df['accident_severity_encoded'].isnull()]['accident_severity'].unique()) # Print unmapped values
+      # Option: drop rows with unmapped severity
+      df.dropna(subset=['accident_severity_encoded'], inplace=True)
+      df['accident_severity_encoded'] = df['accident_severity_encoded'].astype(int)
+
+
+# Define features (X) and target (y)
+if 'accident_severity_encoded' in df.columns:
+  X = df.drop(['accident_severity', 'accident_severity_encoded'] + [col for col in ['location_latitude', 'location_longitude'] if col in df.columns], axis=1) # Exclude original severity and location for now
+  y = df['accident_severity_encoded']
+else:
+    print("Error: Target variable 'accident_severity_encoded' not found after processing.")
+    # Exit or handle the error appropriately
+    exit() # Exiting for demonstration purposes
+
+# Identify categorical and numerical features
+categorical_features = X.select_dtypes(include=['object']).columns
+numerical_features = X.select_dtypes(include=['int64', 'float64']).columns
+
+# Create preprocessing pipelines for numerical and categorical features
+numerical_transformer = StandardScaler()
+categorical_transformer = OneHotEncoder(handle_unknown='ignore')
+
+# Create a column transformer to apply different transformations to different columns
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', numerical_transformer, numerical_features),
+        ('cat', categorical_transformer, categorical_features)])
+
+# --- Exploratory Data Analysis (EDA) ---
+
+if 'accident_severity' in df.columns:
+    plt.figure(figsize=(8, 5))
+    sns.countplot(x='accident_severity', data=df, order=['Slight', 'Serious', 'Fatal'])
+    plt.title('Distribution of Accident Severity')
+    plt.xlabel('Accident Severity')
+    plt.ylabel('Count')
+    plt.show()
+
+# Example of correlation heatmap for numerical features
+if not numerical_features.empty:
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(df[numerical_features].corr(), annot=True, cmap='coolwarm', fmt=".2f")
+    plt.title('Correlation Matrix of Numerical Features')
+    plt.show()
+
+# --- Model Training and Evaluation ---
+
+# Split data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y) # Use stratify for imbalanced classes
+
+# Create a pipeline with preprocessing and a model (Logistic Regression example)
+model_lr = Pipeline(steps=[('preprocessor', preprocessor),
+                           ('classifier', LogisticRegression(max_iter=1000))])
+
+# Train the Logistic Regression model
+model_lr.fit(X_train, y_train)
+
+# Make predictions
+y_pred_lr = model_lr.predict(X_test)
+
+# Evaluate the Logistic Regression model
+print("\n--- Logistic Regression Model Evaluation ---")
+print(classification_report(y_test, y_pred_lr))
+print("Confusion Matrix:")
+print(confusion_matrix(y_test, y_pred_lr))
+
+# Create a pipeline with preprocessing and a model (Random Forest example)
+model_rf = Pipeline(steps=[('preprocessor', preprocessor),
+                           ('classifier', RandomForestClassifier(n_estimators=100, random_state=42))])
+
+# Train the Random Forest model
+model_rf.fit(X_train, y_test) # Corrected target variable for RF training
+
+# Make predictions
+y_pred_rf = model_rf.predict(X_test)
+
+# Evaluate the Random Forest model
+print("\n--- Random Forest Model Evaluation ---")
+print(classification_report(y_test, y_pred_rf))
+print("Confusion Matrix:")
+print(confusion_matrix(y_test, y_pred_rf))
+
+# --- Deep Learning Model (Simple Neural Network) ---
+
+# Preprocess data for the neural network
+X_train_processed = preprocessor.fit_transform(X_train)
+X_test_processed = preprocessor.transform(X_test)
+
+# Define the neural network model
+model_nn = Sequential([
+    Dense(128, activation='relu', input_shape=(X_train_processed.shape[1],)),
+    Dropout(0.3),
+    Dense(64, activation='relu'),
+    Dropout(0.3),
+    Dense(3, activation='softmax') # 3 classes for severity
+])
+
+# Compile the model
+model_nn.compile(optimizer='adam',
+                 loss='sparse_categorical_crossentropy', # Use sparse_categorical_crossentropy for integer labels
+                 metrics=['accuracy'])
+
+# Train the neural network
+print("\n--- Training Neural Network ---")
+history = model_nn.fit(X_train_processed, y_train, epochs=50, batch_size=32, validation_split=0.2, verbose=0) # Added verbose=0
+
+# Evaluate the neural network
+loss, accuracy = model_nn.evaluate(X_test_processed, y_test, verbose=0)
+print(f"\nNeural Network Test Accuracy: {accuracy:.4f}")
+
+# Make predictions with the neural network
+y_pred_nn_probs = model_nn.predict(X_test_processed)
+y_pred_nn = y_pred_nn_probs.argmax(axis=1)
+
+print("\n--- Neural Network Model Evaluation ---")
+print(classification_report(y_test, y_pred_nn))
+print("Confusion Matrix:")
+print(confusion_matrix(y_test, y_pred_nn))
+
+# --- Prediction and Deployment Considerations ---
+
+# Once you have a trained model, you can use it to predict the severity of new accidents.
+# For deployment, you would save the trained model and the preprocessor.
+
+# Example of saving the trained Random Forest model (using joblib or pickle)
+import joblib
+joblib.dump(model_rf, 'random_forest_accident_predictor.pkl')
+joblib.dump(preprocessor, 'preprocessor.pkl')
+
+print("\nTrained Random Forest model and preprocessor saved.")
+
+# Example of loading the model and preprocessor for prediction on new data
+# loaded_model = joblib.load('random_forest_accident_predictor.pkl')
+# loaded_preprocessor = joblib.load('preprocessor.pkl')
+# new_data = pd.DataFrame({...}) # Create a DataFrame with new accident data
+# new_data_processed = loaded_preprocessor.transform(new_data)
+# predicted_severity_encoded = loaded_model.predict(new_data_processed)
+# predicted_severity = [list(severity_mapping.keys())[list(severity_mapping.values()).index(pred)] for pred in predicted_severity_encoded]
+# print("Predicted Severity for New Data:", predicted_severity)
+
+# --- Visualization of Training History (Neural Network) ---
+
+plt.figure(figsize=(12, 6))
+plt.plot(history.history['accuracy'], label='Training Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Neural Network Training and Validation Accuracy')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.legend()
+plt.show()
+
+plt.figure(figsize=(12, 6))
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Neural Network Training and Validation Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend()
+plt.show()
